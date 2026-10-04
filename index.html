@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>簡易ライントレース・シミュレーター</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+        h2 { margin-bottom: 5px; color: #333; }
+        .container {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 20px; border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        canvas {
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+        }
+        .controls {
+            width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 520px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        .param-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        label { font-size: 12px; font-weight: bold; color: #555; }
+        .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #007bff;
+            margin-top: 5px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 2px;
+        }
+        .status {
+            margin-top: 5px;
+            padding: 8px;
+            background: #eee;
+            border-radius: 4px;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+        .btn {
+            flex: 1;
+            padding: 8px 0;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            text-align: center;
+        }
+        .btn-start {
+            background: #007bff;
+        }
+        .btn-start:hover {
+            background: #0056b3;
+        }
+        .btn-reset {
+            background: #6c757d;
+        }
+        .btn-reset:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>簡易ライントレース・シミュレーター</h2>
+    <p style="margin-top:0; color:#666; font-size:13px;">（全パラメータ・応答遅延・RESET対応モデル）</p>
+
+    <div class="container">
+        <canvas id="simCanvas" width="600" height="500"></canvas>
+
+        <div class="controls">
+            <div class="btn-group">
+                <button class="btn btn-start" id="startBtn">START</button>
+                <button class="btn btn-reset" id="resetBtn">RESET</button>
+            </div>
+            
+            <div class="section-title">周期・遅延設定</div>
+            <div class="param-group">
+                <label for="drawIntervalRange">画面描画周期: <span id="drawIntervalVal">100</span>ms</label>
+                <input type="range" id="drawIntervalRange" min="20" max="100" step="5" value="100">
+            </div>
+
+            <div class="param-group">
+                <label for="intervalRange">演算・制御周期: <span id="intervalVal">20</span>ms</label>
+                <input type="range" id="intervalRange" min="10" max="100" step="5" value="20">
+            </div>
+
+            <!-- 遅延時間: デフォルト100ms, 分解能10ms (step="10") -->
+            <div class="param-group">
+                <label for="delayRange" style="color: #d9534f;">動作応答遅延時間: <span id="delayVal">100</span>ms (<span id="delaySecVal">0.10</span>s)</label>
+                <input type="range" id="delayRange" min="0" max="200" step="10" value="100">
+                <span style="font-size: 10px; color: #888;">センサ検出からモータ反応までのタイムラグ</span>
+            </div>
+
+            <div class="section-title">モータ制御速度</div>
+            <div class="param-group">
+                <label for="straightSpeedRange">直進時のモータ速度: <span id="straightSpeedVal">3.0</span></label>
+                <input type="range" id="straightSpeedRange" min="0.5" max="6.0" step="0.1" value="3.0">
+            </div>
+
+            <!-- 旋回側速度: デフォルト 0.0 -->
+            <div class="param-group">
+                <label for="turnSpeedRange">旋回側のモータ速度: <span id="turnSpeedVal">0.0</span></label>
+                <input type="range" id="turnSpeedRange" min="-3.0" max="3.0" step="0.1" value="0.0">
+            </div>
+
+            <div class="section-title">センサー配置</div>
+            <div class="param-group">
+                <label for="sensorGapRange">センサー横位置 (中心の半分): <span id="sensorGapVal">15.0</span></label>
+                <input type="range" id="sensorGapRange" min="5.0" max="30.0" step="0.5" value="15.0">
+            </div>
+
+            <div class="param-group">
+                <label for="sensorForwardRange">センサー前進位置: <span id="sensorForwardVal">25.0</span></label>
+                <input type="range" id="sensorForwardRange" min="5.0" max="50.0" step="1.0" value="25.0">
+            </div>
+
+            <div class="section-title">コース形状</div>
+            <div class="param-group">
+                <label for="trackStraightRange">直線部分の長さ: <span id="trackStraightVal">200</span>px</label>
+                <input type="range" id="trackStraightRange" min="50" max="350" step="10" value="200">
+            </div>
+
+            <div class="param-group">
+                <label for="trackRadiusRange">コーナーの半径: <span id="trackRadiusVal">120</span>px</label>
+                <input type="range" id="trackRadiusRange" min="50" max="180" step="5" value="120">
+            </div>
+
+            <div class="param-group">
+                <label for="trackLineWidthRange">コース線の太さ: <span id="trackLineWidthVal">25</span>px</label>
+                <input type="range" id="trackLineWidthRange" min="5" max="50" step="1" value="25">
+            </div>
+
+            <div class="status">
+                <strong>ステータス:</strong><br>
+                リアルタイム検出: L:<span id="statusLeft">白</span> | R:<span id="statusRight">白</span><br>
+                遅延反映制御状態: L:<span id="statusDelayedLeft">白</span> | R:<span id="statusDelayedRight">白</span><br>
+                左モータ速度: <span id="statusLMotor">3.0</span> | 右モータ: <span id="statusRMotor">3.0</span><br>
+                描画レート: <span id="statusFps">10</span> FPS
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- デフォルト定数（リセット用） ---
+        const DEFAULT_PARAMS = {
+            DRAW_INTERVAL: 100.0,
+            CONTROL_INTERVAL: 20.0,
+            CONTROL_DELAY: 150.0,     // 100ms
+            STRAIGHT_SPEED: 2.0,
+            TURN_MOTOR_SPEED: 0.0,    // 0.0
+            SENSOR_GAP: 10.0,
+            SENSOR_FORWARD: 25.0,
+            TRACK_STRAIGHT: 100,
+            TRACK_RADIUS: 100,
+            TRACK_LINE_WIDTH: 10
+        };
+
+        // --- 可変パラメータ ---
+        let CONTROL_INTERVAL = DEFAULT_PARAMS.CONTROL_INTERVAL;
+        let DRAW_INTERVAL = DEFAULT_PARAMS.DRAW_INTERVAL;
+        let CONTROL_DELAY = DEFAULT_PARAMS.CONTROL_DELAY;
+        
+        let STRAIGHT_SPEED = DEFAULT_PARAMS.STRAIGHT_SPEED;
+        let TURN_MOTOR_SPEED = DEFAULT_PARAMS.TURN_MOTOR_SPEED;
+
+        let TREAD = 30.0;
+        let SENSOR_GAP = DEFAULT_PARAMS.SENSOR_GAP;
+        let SENSOR_FORWARD = DEFAULT_PARAMS.SENSOR_FORWARD;
+
+        let TRACK_STRAIGHT = DEFAULT_PARAMS.TRACK_STRAIGHT;
+        let TRACK_RADIUS = DEFAULT_PARAMS.TRACK_RADIUS;
+        let TRACK_LINE_WIDTH = DEFAULT_PARAMS.TRACK_LINE_WIDTH;
+
+        let lastPhysicsTime = 0;
+        let lastDrawTime = 0;
+
+        let robot = { x: 0, y: 0, theta: 0 };
+        let leftIsBlack = false;
+        let rightIsBlack = false;
+
+        let sensorHistory = [];
+        let activeLeftBlack = false;
+        let activeRightBlack = false;
+        
+        let currentLMotor = STRAIGHT_SPEED;
+        let currentRMotor = STRAIGHT_SPEED;
+
+        const trackCanvas = document.createElement('canvas');
+        trackCanvas.width = canvas.width; trackCanvas.height = canvas.height;
+        const trackCtx = trackCanvas.getContext('2d');
+
+        function drawTrack() {
+            trackCtx.fillStyle = 'white';
+            trackCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            const leftCenterX = centerX - TRACK_STRAIGHT / 2;
+            const rightCenterX = centerX + TRACK_STRAIGHT / 2;
+
+            trackCtx.strokeStyle = 'black';
+            trackCtx.lineWidth = TRACK_LINE_WIDTH;
+            trackCtx.lineCap = 'round';
+            trackCtx.lineJoin = 'round';
+
+            trackCtx.beginPath();
+            trackCtx.moveTo(leftCenterX, centerY - TRACK_RADIUS);
+            trackCtx.lineTo(rightCenterX, centerY - TRACK_RADIUS);
+            trackCtx.arc(rightCenterX, centerY, TRACK_RADIUS, -Math.PI / 2, Math.PI / 2, false);
+            trackCtx.lineTo(leftCenterX, centerY + TRACK_RADIUS);
+            trackCtx.arc(leftCenterX, centerY, TRACK_RADIUS, Math.PI / 2, -Math.PI / 2, false);
+            trackCtx.closePath();
+
+            trackCtx.stroke();
+        }
+
+        function startRobot() {
+            const startX = (canvas.width - TRACK_STRAIGHT) / 2;
+            const startY = canvas.height / 2 - TRACK_RADIUS;
+
+            robot.x = startX;
+            robot.y = startY;
+            robot.theta = 0;
+            leftIsBlack = false;
+            rightIsBlack = false;
+            activeLeftBlack = false;
+            activeRightBlack = false;
+            sensorHistory = [];
+            currentLMotor = STRAIGHT_SPEED;
+            currentRMotor = STRAIGHT_SPEED;
+        }
+
+        function resetAllParams() {
+            document.getElementById('drawIntervalRange').value = DEFAULT_PARAMS.DRAW_INTERVAL;
+            document.getElementById('drawIntervalVal').textContent = DEFAULT_PARAMS.DRAW_INTERVAL;
+            document.getElementById('statusFps').textContent = Math.round(1000 / DEFAULT_PARAMS.DRAW_INTERVAL);
+
+            document.getElementById('intervalRange').value = DEFAULT_PARAMS.CONTROL_INTERVAL;
+            document.getElementById('intervalVal').textContent = DEFAULT_PARAMS.CONTROL_INTERVAL;
+
+            document.getElementById('delayRange').value = DEFAULT_PARAMS.CONTROL_DELAY;
+            document.getElementById('delayVal').textContent = DEFAULT_PARAMS.CONTROL_DELAY;
+            document.getElementById('delaySecVal').textContent = (DEFAULT_PARAMS.CONTROL_DELAY / 1000).toFixed(2);
+
+            document.getElementById('straightSpeedRange').value = DEFAULT_PARAMS.STRAIGHT_SPEED;
+            document.getElementById('straightSpeedVal').textContent = DEFAULT_PARAMS.STRAIGHT_SPEED.toFixed(1);
+
+            document.getElementById('turnSpeedRange').value = DEFAULT_PARAMS.TURN_MOTOR_SPEED;
+            document.getElementById('turnSpeedVal').textContent = DEFAULT_PARAMS.TURN_MOTOR_SPEED.toFixed(1);
+
+            document.getElementById('sensorGapRange').value = DEFAULT_PARAMS.SENSOR_GAP;
+            document.getElementById('sensorGapVal').textContent = DEFAULT_PARAMS.SENSOR_GAP.toFixed(1);
+
+            document.getElementById('sensorForwardRange').value = DEFAULT_PARAMS.SENSOR_FORWARD;
+            document.getElementById('sensorForwardVal').textContent = DEFAULT_PARAMS.SENSOR_FORWARD.toFixed(1);
+
+            document.getElementById('trackStraightRange').value = DEFAULT_PARAMS.TRACK_STRAIGHT;
+            document.getElementById('trackStraightVal').textContent = DEFAULT_PARAMS.TRACK_STRAIGHT;
+
+            document.getElementById('trackRadiusRange').value = DEFAULT_PARAMS.TRACK_RADIUS;
+            document.getElementById('trackRadiusVal').textContent = DEFAULT_PARAMS.TRACK_RADIUS;
+
+            document.getElementById('trackLineWidthRange').value = DEFAULT_PARAMS.TRACK_LINE_WIDTH;
+            document.getElementById('trackLineWidthVal').textContent = DEFAULT_PARAMS.TRACK_LINE_WIDTH;
+
+            DRAW_INTERVAL = DEFAULT_PARAMS.DRAW_INTERVAL;
+            CONTROL_INTERVAL = DEFAULT_PARAMS.CONTROL_INTERVAL;
+            CONTROL_DELAY = DEFAULT_PARAMS.CONTROL_DELAY;
+            STRAIGHT_SPEED = DEFAULT_PARAMS.STRAIGHT_SPEED;
+            TURN_MOTOR_SPEED = DEFAULT_PARAMS.TURN_MOTOR_SPEED;
+            SENSOR_GAP = DEFAULT_PARAMS.SENSOR_GAP;
+            SENSOR_FORWARD = DEFAULT_PARAMS.SENSOR_FORWARD;
+            TRACK_STRAIGHT = DEFAULT_PARAMS.TRACK_STRAIGHT;
+            TRACK_RADIUS = DEFAULT_PARAMS.TRACK_RADIUS;
+            TRACK_LINE_WIDTH = DEFAULT_PARAMS.TRACK_LINE_WIDTH;
+
+            drawTrack();
+            startRobot();
+            render();
+        }
+
+        document.getElementById('drawIntervalRange').addEventListener('input', (e) => {
+            DRAW_INTERVAL = parseFloat(e.target.value);
+            document.getElementById('drawIntervalVal').textContent = DRAW_INTERVAL;
+            document.getElementById('statusFps').textContent = Math.round(1000 / DRAW_INTERVAL);
+        });
+        document.getElementById('intervalRange').addEventListener('input', (e) => {
+            CONTROL_INTERVAL = parseFloat(e.target.value);
+            document.getElementById('intervalVal').textContent = CONTROL_INTERVAL;
+        });
+        document.getElementById('delayRange').addEventListener('input', (e) => {
+            CONTROL_DELAY = parseFloat(e.target.value);
+            document.getElementById('delayVal').textContent = CONTROL_DELAY;
+            document.getElementById('delaySecVal').textContent = (CONTROL_DELAY / 1000).toFixed(2);
+        });
+        document.getElementById('straightSpeedRange').addEventListener('input', (e) => {
+            STRAIGHT_SPEED = parseFloat(e.target.value);
+            document.getElementById('straightSpeedVal').textContent = STRAIGHT_SPEED.toFixed(1);
+        });
+        document.getElementById('turnSpeedRange').addEventListener('input', (e) => {
+            TURN_MOTOR_SPEED = parseFloat(e.target.value);
+            document.getElementById('turnSpeedVal').textContent = TURN_MOTOR_SPEED.toFixed(1);
+        });
+        document.getElementById('sensorGapRange').addEventListener('input', (e) => {
+            SENSOR_GAP = parseFloat(e.target.value);
+            document.getElementById('sensorGapVal').textContent = SENSOR_GAP.toFixed(1);
+        });
+        document.getElementById('sensorForwardRange').addEventListener('input', (e) => {
+            SENSOR_FORWARD = parseFloat(e.target.value);
+            document.getElementById('sensorForwardVal').textContent = SENSOR_FORWARD.toFixed(1);
+        });
+        document.getElementById('trackStraightRange').addEventListener('input', (e) => {
+            TRACK_STRAIGHT = parseInt(e.target.value, 10);
+            document.getElementById('trackStraightVal').textContent = TRACK_STRAIGHT;
+            drawTrack();
+        });
+        document.getElementById('trackRadiusRange').addEventListener('input', (e) => {
+            TRACK_RADIUS = parseInt(e.target.value, 10);
+            document.getElementById('trackRadiusVal').textContent = TRACK_RADIUS;
+            drawTrack();
+        });
+        document.getElementById('trackLineWidthRange').addEventListener('input', (e) => {
+            TRACK_LINE_WIDTH = parseInt(e.target.value, 10);
+            document.getElementById('trackLineWidthVal').textContent = TRACK_LINE_WIDTH;
+            drawTrack();
+        });
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            startRobot(); render();
+        });
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            resetAllParams();
+        });
+
+        function updateSimulation(currentTime) {
+            if (!lastPhysicsTime) lastPhysicsTime = currentTime;
+            if (!lastDrawTime) lastDrawTime = currentTime;
+
+            if (currentTime - lastPhysicsTime >= CONTROL_INTERVAL) {
+                lastPhysicsTime = currentTime;
+
+                const cos = Math.cos(robot.theta);
+                const sin = Math.sin(robot.theta);
+
+                const sl_x = robot.x + SENSOR_FORWARD * cos - SENSOR_GAP * sin;
+                const sl_y = robot.y + SENSOR_FORWARD * sin + SENSOR_GAP * cos;
+                const sr_x = robot.x + SENSOR_FORWARD * cos + SENSOR_GAP * sin;
+                const sr_y = robot.y + SENSOR_FORWARD * sin - SENSOR_GAP * cos;
+
+                leftIsBlack = false; rightIsBlack = false;
+
+                if (sl_x >= 0 && sl_x < canvas.width && sl_y >= 0 && sl_y < canvas.height) {
+                    if (trackCtx.getImageData(Math.floor(sl_x), Math.floor(sl_y), 1, 1).data[0] < 128) leftIsBlack = true; 
+                }
+                if (sr_x >= 0 && sr_x < canvas.width && sr_y >= 0 && sr_y < canvas.height) {
+                    if (trackCtx.getImageData(Math.floor(sr_x), Math.floor(sr_y), 1, 1).data[0] < 128) rightIsBlack = true;
+                }
+
+                sensorHistory.push({
+                    time: currentTime,
+                    left: leftIsBlack,
+                    right: rightIsBlack
+                });
+
+                const targetTime = currentTime - CONTROL_DELAY;
+                while (sensorHistory.length > 0 && sensorHistory[0].time <= targetTime) {
+                    const oldest = sensorHistory.shift();
+                    activeLeftBlack = oldest.left;
+                    activeRightBlack = oldest.right;
+                }
+                
+                if (CONTROL_DELAY === 0) {
+                    activeLeftBlack = leftIsBlack;
+                    activeRightBlack = rightIsBlack;
+                }
+
+                if (activeLeftBlack && !activeRightBlack) {
+                    currentLMotor = TURN_MOTOR_SPEED;
+                    currentRMotor = STRAIGHT_SPEED;
+                } else if (!activeLeftBlack && activeRightBlack) {
+                    currentLMotor = STRAIGHT_SPEED;
+                    currentRMotor = TURN_MOTOR_SPEED;
+                } else {
+                    currentLMotor = STRAIGHT_SPEED;
+                    currentRMotor = STRAIGHT_SPEED;
+                }
+
+                const Vl = currentLMotor;
+                const Vr = currentRMotor;
+
+                const v = (Vr + Vl) / 2.0;
+                const w = (Vr - Vl) / TREAD;
+
+                const dtFactor = CONTROL_INTERVAL / 16.7; 
+                robot.x += v * cos * dtFactor;
+                robot.y += v * sin * dtFactor;
+                robot.theta += w * dtFactor;
+
+                if (robot.x < 0 || robot.x > canvas.width || robot.y < 0 || robot.y > canvas.height) {
+                    startRobot();
+                }
+            }
+
+            if (currentTime - lastDrawTime >= DRAW_INTERVAL) {
+                lastDrawTime = currentTime;
+
+                document.getElementById('statusLeft').textContent = leftIsBlack ? '黒' : '白';
+                document.getElementById('statusLeft').style.color = leftIsBlack ? 'black' : '#999';
+                document.getElementById('statusRight').textContent = rightIsBlack ? '黒' : '白';
+                document.getElementById('statusRight').style.color = rightIsBlack ? 'black' : '#999';
+
+                document.getElementById('statusDelayedLeft').textContent = activeLeftBlack ? '黒' : '白';
+                document.getElementById('statusDelayedLeft').style.color = activeLeftBlack ? 'black' : '#999';
+                document.getElementById('statusDelayedRight').textContent = activeRightBlack ? '黒' : '白';
+                document.getElementById('statusDelayedRight').style.color = activeRightBlack ? 'black' : '#999';
+
+                document.getElementById('statusLMotor').textContent = currentLMotor.toFixed(1);
+                document.getElementById('statusRMotor').textContent = currentRMotor.toFixed(1);
+
+                render();
+            }
+
+            requestAnimationFrame(updateSimulation);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(trackCanvas, 0, 0); 
+
+            const cos = Math.cos(robot.theta);
+            const sin = Math.sin(robot.theta);
+
+            ctx.fillStyle = 'rgba(0, 123, 255, 0.8)';
+            ctx.beginPath(); ctx.arc(robot.x, robot.y, 15, 0, Math.PI * 2); ctx.fill();
+            
+            ctx.strokeStyle = '#004085'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(robot.x, robot.y); ctx.lineTo(robot.x + 15 * cos, robot.y + 15 * sin); ctx.stroke();
+
+            const sl_x = robot.x + SENSOR_FORWARD * cos - SENSOR_GAP * sin;
+            const sl_y = robot.y + SENSOR_FORWARD * sin + SENSOR_GAP * cos;
+            const sr_x = robot.x + SENSOR_FORWARD * cos + SENSOR_GAP * sin;
+            const sr_y = robot.y + SENSOR_FORWARD * sin - SENSOR_GAP * cos;
+
+            ctx.fillStyle = leftIsBlack ? 'black' : 'red';
+            ctx.beginPath(); ctx.arc(sl_x, sl_y, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 1; ctx.stroke();
+
+            ctx.fillStyle = rightIsBlack ? 'black' : 'red';
+            ctx.beginPath(); ctx.arc(sr_x, sr_y, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.stroke();
+        }
+
+        drawTrack();
+        startRobot();
+        requestAnimationFrame(updateSimulation);
+    </script>
+</body>
+</html>
